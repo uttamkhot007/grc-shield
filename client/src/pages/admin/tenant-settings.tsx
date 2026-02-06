@@ -224,7 +224,7 @@ export default function TenantSettingsPage() {
   const createUserMutation = useMutation({
     mutationFn: (data: typeof newUser) => {
       const tempPassword = generateRandomPassword();
-      return apiRequest("POST", "/api/users", { ...data, tenantId, username: data.email, password: tempPassword });
+      return apiRequest("POST", "/api/users", { ...data, tenantId, username: data.email, password: tempPassword, adminCreate: true });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });

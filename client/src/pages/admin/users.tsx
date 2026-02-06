@@ -72,7 +72,7 @@ export default function UsersPage() {
   });
 
   const createUserMutation = useMutation({
-    mutationFn: (data: typeof formData) => apiRequest("POST", "/api/users", data),
+    mutationFn: (data: typeof formData) => apiRequest("POST", "/api/users", { ...data, adminCreate: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({ title: "User created successfully" });

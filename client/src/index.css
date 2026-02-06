@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE - Premium Corporate Blue Theme */
+/* LIGHT MODE - Pure White Clean Theme */
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
@@ -10,12 +10,12 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 220 20% 97%;
+  --background: 0 0% 100%;
   --foreground: 222 47% 11%;
-  --border: 220 13% 91%;
+  --border: 0 0% 90%;
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
-  --card-border: 220 13% 91%;
+  --card-border: 0 0% 90%;
   --sidebar: 222 47% 11%;
   --sidebar-foreground: 210 20% 98%;
   --sidebar-border: 222 37% 18%;
@@ -26,12 +26,12 @@
   --sidebar-ring: 217 91% 60%;
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
-  --popover-border: 220 13% 91%;
+  --popover-border: 0 0% 90%;
   --primary: 217 91% 60%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 14% 96%;
+  --secondary: 0 0% 96%;
   --secondary-foreground: 222 47% 11%;
-  --muted: 220 14% 96%;
+  --muted: 0 0% 96%;
   --muted-foreground: 220 8% 46%;
   --accent: 217 91% 95%;
   --accent-foreground: 217 91% 40%;
@@ -443,11 +443,12 @@
   /* Glassmorphism Card */
   .glass-card {
     background: linear-gradient(135deg, 
-      rgba(255, 255, 255, 0.1) 0%, 
-      rgba(255, 255, 255, 0.05) 100%);
+      rgba(255, 255, 255, 0.95) 0%, 
+      rgba(255, 255, 255, 0.85) 100%);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   }
 
   .dark .glass-card {
@@ -455,6 +456,7 @@
       rgba(255, 255, 255, 0.05) 0%, 
       rgba(255, 255, 255, 0.02) 100%);
     border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: none;
   }
 
   /* 3D Card Effect */

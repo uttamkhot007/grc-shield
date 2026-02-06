@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTenant } from "@/contexts/tenant-context";
+import type { ConsentRecord } from "@shared/schema";
 import {
   Plus,
   Search,
@@ -11,6 +14,7 @@ import {
   Eye,
   Edit,
   MoreHorizontal,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,64 +48,56 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 
-interface ConsentRecord {
-  id: string;
-  userId: string;
-  email: string;
-  purpose: string;
-  status: string;
-  collectedAt: string;
-  expiresAt: string;
-  source: string;
-}
-
-interface ConsentPurpose {
-  id: string;
-  name: string;
-  description: string;
-  legalBasis: string;
-  consentRate: number;
-  totalConsents: number;
-  activeConsents: number;
-}
-
-const mockConsents: ConsentRecord[] = [
-  { id: "1", userId: "USR001", email: "john.doe@example.com", purpose: "Marketing Communications", status: "active", collectedAt: "2025-12-15", expiresAt: "2026-12-15", source: "Website" },
-  { id: "2", userId: "USR002", email: "jane.smith@example.com", purpose: "Analytics & Tracking", status: "active", collectedAt: "2025-11-20", expiresAt: "2026-11-20", source: "Mobile App" },
-  { id: "3", userId: "USR003", email: "bob.wilson@example.com", purpose: "Marketing Communications", status: "withdrawn", collectedAt: "2025-10-05", expiresAt: "2026-10-05", source: "Website" },
-  { id: "4", userId: "USR004", email: "alice.johnson@example.com", purpose: "Third-Party Sharing", status: "active", collectedAt: "2025-12-01", expiresAt: "2026-12-01", source: "Portal" },
-  { id: "5", userId: "USR005", email: "charlie.brown@example.com", purpose: "Service Notifications", status: "expired", collectedAt: "2024-12-20", expiresAt: "2025-12-20", source: "Website" },
-];
-
-const mockPurposes: ConsentPurpose[] = [
-  { id: "1", name: "Marketing Communications", description: "Email, SMS, and push notifications for marketing", legalBasis: "Consent", consentRate: 68, totalConsents: 15420, activeConsents: 10486 },
-  { id: "2", name: "Analytics & Tracking", description: "Website and app usage analytics", legalBasis: "Legitimate Interest", consentRate: 82, totalConsents: 18500, activeConsents: 15170 },
-  { id: "3", name: "Third-Party Sharing", description: "Sharing data with partner organizations", legalBasis: "Consent", consentRate: 34, totalConsents: 15420, activeConsents: 5243 },
-  { id: "4", name: "Service Notifications", description: "Essential service-related communications", legalBasis: "Contract", consentRate: 95, totalConsents: 18500, activeConsents: 17575 },
-];
+const purposeLabels: Record<string, string> = {
+  marketing: "Marketing Communications",
+  analytics: "Analytics & Tracking",
+  third_party_sharing: "Third-Party Sharing",
+  service_notifications: "Service Notifications",
+  profiling: "Profiling",
+  research: "Research",
+};
 
 const statusStyles: Record<string, { bg: string; text: string; icon: any }> = {
-  active: { bg: "bg-chart-2/20", text: "text-chart-2", icon: CheckCircle2 },
+  pending: { bg: "bg-chart-1/20", text: "text-chart-1", icon: Clock },
+  granted: { bg: "bg-chart-2/20", text: "text-chart-2", icon: CheckCircle2 },
   withdrawn: { bg: "bg-destructive/20", text: "text-destructive", icon: XCircle },
   expired: { bg: "bg-muted", text: "text-muted-foreground", icon: Clock },
 };
 
 export default function ConsentManagementPage() {
+  const { toast } = useToast();
+  const { currentTenant } = useTenant();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("records");
 
-  const filteredConsents = mockConsents.filter((consent) => {
-    const matchesSearch = consent.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      consent.purpose.toLowerCase().includes(searchQuery.toLowerCase());
+  const { data: consents = [], isLoading } = useQuery<ConsentRecord[]>({
+    queryKey: ["/api/consent-records", currentTenant?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/consent-records?tenantId=${currentTenant?.id}`);
+      if (!response.ok) throw new Error("Failed to fetch consent records");
+      return response.json();
+    },
+    enabled: !!currentTenant?.id,
+  });
+
+  const formatDate = (date: Date | null) => {
+    if (!date) return '-';
+    return new Date(date).toLocaleDateString();
+  };
+
+  const filteredConsents = consents.filter((consent) => {
+    const matchesSearch = (consent.dataSubjectEmail || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (consent.purpose || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || consent.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const activeConsents = mockConsents.filter(c => c.status === "active").length;
-  const withdrawnConsents = mockConsents.filter(c => c.status === "withdrawn").length;
-  const expiredConsents = mockConsents.filter(c => c.status === "expired").length;
+  const grantedConsents = consents.filter(c => c.status === "granted").length;
+  const withdrawnConsents = consents.filter(c => c.status === "withdrawn").length;
+  const expiredConsents = consents.filter(c => c.status === "expired").length;
 
   return (
     <div className="flex-1 overflow-auto">
@@ -128,7 +124,7 @@ export default function ConsentManagementPage() {
                     <Users className="h-5 w-5 text-chart-1" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{mockConsents.length}</p>
+                    <p className="text-2xl font-bold">{consents.length}</p>
                     <p className="text-xs text-muted-foreground">Total Records</p>
                   </div>
                 </div>
@@ -141,8 +137,8 @@ export default function ConsentManagementPage() {
                     <CheckCircle2 className="h-5 w-5 text-chart-2" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{activeConsents}</p>
-                    <p className="text-xs text-muted-foreground">Active Consents</p>
+                    <p className="text-2xl font-bold">{grantedConsents}</p>
+                    <p className="text-xs text-muted-foreground">Granted Consents</p>
                   </div>
                 </div>
               </CardContent>
@@ -203,7 +199,8 @@ export default function ConsentManagementPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Status</SelectItem>
-                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="granted">Granted</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
                           <SelectItem value="withdrawn">Withdrawn</SelectItem>
                           <SelectItem value="expired">Expired</SelectItem>
                         </SelectContent>
@@ -226,26 +223,26 @@ export default function ConsentManagementPage() {
                     </TableHeader>
                     <TableBody>
                       {filteredConsents.map((consent) => {
-                        const style = statusStyles[consent.status] || statusStyles.active;
+                        const style = statusStyles[consent.status || 'pending'] || statusStyles.pending;
                         const StatusIcon = style.icon;
                         return (
                           <TableRow key={consent.id} data-testid={`row-consent-${consent.id}`}>
                             <TableCell>
                               <div>
-                                <p className="font-medium">{consent.email}</p>
-                                <p className="text-xs text-muted-foreground">{consent.userId}</p>
+                                <p className="font-medium">{consent.dataSubjectEmail || '-'}</p>
+                                <p className="text-xs text-muted-foreground">{consent.dataSubjectName || consent.dataSubjectId}</p>
                               </div>
                             </TableCell>
-                            <TableCell>{consent.purpose}</TableCell>
+                            <TableCell>{purposeLabels[consent.purpose] || consent.purpose}</TableCell>
                             <TableCell>
                               <Badge className={`${style.bg} ${style.text} border-0 capitalize`}>
                                 <StatusIcon className="h-3 w-3 mr-1" />
-                                {consent.status}
+                                {(consent.status || 'pending').replace("_", " ")}
                               </Badge>
                             </TableCell>
-                            <TableCell>{consent.collectedAt}</TableCell>
-                            <TableCell>{consent.expiresAt}</TableCell>
-                            <TableCell>{consent.source}</TableCell>
+                            <TableCell>{formatDate(consent.grantedAt)}</TableCell>
+                            <TableCell>{formatDate(consent.expiresAt)}</TableCell>
+                            <TableCell>{consent.source || '-'}</TableCell>
                             <TableCell>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -274,38 +271,44 @@ export default function ConsentManagementPage() {
 
             <TabsContent value="purposes" className="mt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {mockPurposes.map((purpose) => (
-                  <Card key={purpose.id} className="card-3d" data-testid={`purpose-${purpose.id}`}>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-base">{purpose.name}</CardTitle>
-                          <CardDescription className="mt-1">{purpose.description}</CardDescription>
-                        </div>
-                        <Badge variant="outline">{purpose.legalBasis}</Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Consent Rate</span>
-                          <span className="font-semibold">{purpose.consentRate}%</span>
-                        </div>
-                        <Progress value={purpose.consentRate} className="h-2" />
-                        <div className="grid grid-cols-2 gap-4 pt-2">
-                          <div className="text-center p-2 bg-muted/50 rounded-lg">
-                            <p className="text-lg font-bold">{purpose.totalConsents.toLocaleString()}</p>
-                            <p className="text-xs text-muted-foreground">Total</p>
+                {Object.entries(purposeLabels).map(([key, label]) => {
+                  const purposeConsents = consents.filter(c => c.purpose === key);
+                  const grantedCount = purposeConsents.filter(c => c.status === "granted").length;
+                  const totalCount = purposeConsents.length;
+                  const consentRate = totalCount > 0 ? Math.round((grantedCount / totalCount) * 100) : 0;
+                  return (
+                    <Card key={key} className="card-3d" data-testid={`purpose-${key}`}>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle className="text-base">{label}</CardTitle>
+                            <CardDescription className="mt-1">Consent records for {label.toLowerCase()}</CardDescription>
                           </div>
-                          <div className="text-center p-2 bg-muted/50 rounded-lg">
-                            <p className="text-lg font-bold">{purpose.activeConsents.toLocaleString()}</p>
-                            <p className="text-xs text-muted-foreground">Active</p>
+                          <Badge variant="outline">Consent</Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Consent Rate</span>
+                            <span className="font-semibold">{consentRate}%</span>
+                          </div>
+                          <Progress value={consentRate} className="h-2" />
+                          <div className="grid grid-cols-2 gap-4 pt-2">
+                            <div className="text-center p-2 bg-muted/50 rounded-lg">
+                              <p className="text-lg font-bold">{totalCount.toLocaleString()}</p>
+                              <p className="text-xs text-muted-foreground">Total</p>
+                            </div>
+                            <div className="text-center p-2 bg-muted/50 rounded-lg">
+                              <p className="text-lg font-bold">{grantedCount.toLocaleString()}</p>
+                              <p className="text-xs text-muted-foreground">Granted</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </TabsContent>
           </Tabs>

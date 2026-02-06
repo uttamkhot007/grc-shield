@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTenant } from "@/contexts/tenant-context";
+import type { BreachIncident } from "@shared/schema";
 import {
   Plus,
   Search,
@@ -12,6 +15,7 @@ import {
   Users,
   FileWarning,
   Bell,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,26 +44,6 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-interface Breach {
-  id: string;
-  title: string;
-  severity: string;
-  status: string;
-  discoveredAt: string;
-  reportedAt?: string;
-  affectedRecords: number;
-  dataTypes: string[];
-  notificationRequired: boolean;
-  description?: string;
-}
-
-const mockBreaches: Breach[] = [
-  { id: "BRE-001", title: "Email System Unauthorized Access", severity: "high", status: "investigating", discoveredAt: "2026-01-25", affectedRecords: 1500, dataTypes: ["Email addresses", "Names"], notificationRequired: true, description: "Unauthorized access to email system detected" },
-  { id: "BRE-002", title: "Customer Database Exposure", severity: "critical", status: "contained", discoveredAt: "2026-01-20", reportedAt: "2026-01-21", affectedRecords: 5000, dataTypes: ["Personal Data", "Financial Info"], notificationRequired: true, description: "Database exposed due to misconfiguration" },
-  { id: "BRE-003", title: "Phishing Attack - HR Data", severity: "medium", status: "resolved", discoveredAt: "2026-01-10", reportedAt: "2026-01-10", affectedRecords: 150, dataTypes: ["Employee Data"], notificationRequired: false, description: "Phishing email led to credential theft" },
-  { id: "BRE-004", title: "Lost Laptop - Sales Data", severity: "low", status: "resolved", discoveredAt: "2026-01-05", reportedAt: "2026-01-06", affectedRecords: 50, dataTypes: ["Contact Info"], notificationRequired: false, description: "Encrypted laptop lost in transit" },
-];
-
 const severityStyles: Record<string, { bg: string; text: string }> = {
   critical: { bg: "bg-destructive", text: "text-white" },
   high: { bg: "bg-chart-3", text: "text-white" },
@@ -68,29 +52,47 @@ const severityStyles: Record<string, { bg: string; text: string }> = {
 };
 
 const statusStyles: Record<string, { bg: string; text: string }> = {
+  detected: { bg: "bg-chart-1/20", text: "text-chart-1" },
   investigating: { bg: "bg-chart-3/20", text: "text-chart-3" },
-  contained: { bg: "bg-chart-1/20", text: "text-chart-1" },
-  resolved: { bg: "bg-chart-2/20", text: "text-chart-2" },
-  notified: { bg: "bg-chart-4/20", text: "text-chart-4" },
+  contained: { bg: "bg-amber-500/20", text: "text-amber-400" },
+  eradicated: { bg: "bg-chart-4/20", text: "text-chart-4" },
+  recovered: { bg: "bg-chart-2/20", text: "text-chart-2" },
+  closed: { bg: "bg-muted", text: "text-muted-foreground" },
 };
 
 export default function BreachManagementPage() {
   const { toast } = useToast();
+  const { currentTenant } = useTenant();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
 
-  const filteredBreaches = mockBreaches.filter((breach) => {
-    const matchesSearch = breach.title.toLowerCase().includes(searchQuery.toLowerCase());
+  const { data: breaches = [], isLoading } = useQuery<BreachIncident[]>({
+    queryKey: ["/api/breach-incidents", currentTenant?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/breach-incidents?tenantId=${currentTenant?.id}`);
+      if (!response.ok) throw new Error("Failed to fetch breach incidents");
+      return response.json();
+    },
+    enabled: !!currentTenant?.id,
+  });
+
+  const formatDate = (date: Date | null) => {
+    if (!date) return '-';
+    return new Date(date).toLocaleDateString();
+  };
+
+  const filteredBreaches = breaches.filter((breach) => {
+    const matchesSearch = (breach.title || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || breach.status === statusFilter;
     const matchesSeverity = severityFilter === "all" || breach.severity === severityFilter;
     return matchesSearch && matchesStatus && matchesSeverity;
   });
 
-  const activeBreaches = mockBreaches.filter(b => b.status !== "resolved").length;
-  const criticalBreaches = mockBreaches.filter(b => b.severity === "critical" || b.severity === "high").length;
-  const totalAffected = mockBreaches.reduce((acc, b) => acc + b.affectedRecords, 0);
-  const notificationRequired = mockBreaches.filter(b => b.notificationRequired && b.status !== "resolved").length;
+  const activeBreaches = breaches.filter(b => b.status !== "closed" && b.status !== "recovered").length;
+  const criticalBreaches = breaches.filter(b => b.severity === "critical" || b.severity === "high").length;
+  const totalAffected = breaches.reduce((acc, b) => acc + (b.affectedDataSubjects || 0), 0);
+  const notificationRequired = breaches.filter(b => (b.regulatoryNotificationRequired || b.dataSubjectNotificationRequired) && b.status !== "closed").length;
 
   return (
     <div className="flex-1 overflow-auto">
@@ -185,9 +187,12 @@ export default function BreachManagementPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="detected">Detected</SelectItem>
                       <SelectItem value="investigating">Investigating</SelectItem>
                       <SelectItem value="contained">Contained</SelectItem>
-                      <SelectItem value="resolved">Resolved</SelectItem>
+                      <SelectItem value="eradicated">Eradicated</SelectItem>
+                      <SelectItem value="recovered">Recovered</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={severityFilter} onValueChange={setSeverityFilter}>
@@ -220,30 +225,30 @@ export default function BreachManagementPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredBreaches.map((breach) => {
-                    const severityStyle = severityStyles[breach.severity] || severityStyles.medium;
-                    const statusStyle = statusStyles[breach.status] || statusStyles.investigating;
+                    const severityStyle = severityStyles[breach.severity || 'medium'] || severityStyles.medium;
+                    const statusStyle = statusStyles[breach.status || 'detected'] || statusStyles.detected;
                     return (
                       <TableRow key={breach.id} data-testid={`row-breach-${breach.id}`}>
                         <TableCell>
                           <div>
                             <p className="font-medium">{breach.title}</p>
-                            <p className="text-xs text-muted-foreground">{breach.id}</p>
+                            <p className="text-xs text-muted-foreground">{breach.incidentNumber}</p>
                           </div>
                         </TableCell>
                         <TableCell>
                           <Badge className={`${severityStyle.bg} ${severityStyle.text} border-0 capitalize`}>
-                            {breach.severity}
+                            {breach.severity || 'medium'}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <Badge className={`${statusStyle.bg} ${statusStyle.text} border-0 capitalize`}>
-                            {breach.status}
+                            {(breach.status || 'detected').replace("_", " ")}
                           </Badge>
                         </TableCell>
-                        <TableCell>{breach.discoveredAt}</TableCell>
-                        <TableCell>{breach.affectedRecords.toLocaleString()}</TableCell>
+                        <TableCell>{formatDate(breach.discoveredAt)}</TableCell>
+                        <TableCell>{(breach.affectedDataSubjects || 0).toLocaleString()}</TableCell>
                         <TableCell>
-                          {breach.notificationRequired ? (
+                          {breach.regulatoryNotificationRequired || breach.dataSubjectNotificationRequired ? (
                             <Badge className="bg-chart-3/20 text-chart-3 border-0">Required</Badge>
                           ) : (
                             <Badge variant="outline">Not Required</Badge>

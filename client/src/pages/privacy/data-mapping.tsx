@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTenant } from "@/contexts/tenant-context";
+import type { DataFlowMapping } from "@shared/schema";
 import {
   Plus,
   Search,
@@ -11,6 +14,7 @@ import {
   Cloud,
   Laptop,
   Shield,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,26 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface DataFlow {
-  id: string;
-  source: string;
-  sourceType: string;
-  destination: string;
-  destinationType: string;
-  dataTypes: string[];
-  purpose: string;
-  transferMechanism: string;
-  crossBorder: boolean;
-}
-
-const mockDataFlows: DataFlow[] = [
-  { id: "1", source: "Website Forms", sourceType: "web", destination: "CRM Database", destinationType: "database", dataTypes: ["Personal Data", "Contact Info"], purpose: "Lead Management", transferMechanism: "API", crossBorder: false },
-  { id: "2", source: "CRM Database", sourceType: "database", destination: "Marketing Platform", destinationType: "cloud", dataTypes: ["Contact Info", "Marketing Preferences"], purpose: "Email Campaigns", transferMechanism: "ETL", crossBorder: true },
-  { id: "3", source: "HR System", sourceType: "server", destination: "Payroll Provider", destinationType: "third_party", dataTypes: ["Employee Data", "Financial Data"], purpose: "Salary Processing", transferMechanism: "SFTP", crossBorder: false },
-  { id: "4", source: "Mobile App", sourceType: "web", destination: "Analytics Platform", destinationType: "cloud", dataTypes: ["Behavioral Data", "Device Info"], purpose: "Usage Analytics", transferMechanism: "SDK", crossBorder: true },
-  { id: "5", source: "Customer Portal", sourceType: "web", destination: "Support System", destinationType: "server", dataTypes: ["Personal Data", "Support Tickets"], purpose: "Customer Support", transferMechanism: "API", crossBorder: false },
-];
-
 const typeIcons: Record<string, any> = {
   web: Globe,
   database: Database,
@@ -54,13 +38,23 @@ const typeIcons: Record<string, any> = {
 };
 
 export default function DataMappingPage() {
+  const { currentTenant } = useTenant();
   const [searchQuery, setSearchQuery] = useState("");
   const [crossBorderFilter, setCrossBorderFilter] = useState("all");
-  const [dataFlows] = useState<DataFlow[]>(mockDataFlows);
+
+  const { data: dataFlows = [], isLoading } = useQuery<DataFlowMapping[]>({
+    queryKey: ["/api/data-flow-mappings", currentTenant?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/data-flow-mappings?tenantId=${currentTenant?.id}`);
+      if (!response.ok) throw new Error("Failed to fetch data flow mappings");
+      return response.json();
+    },
+    enabled: !!currentTenant?.id,
+  });
 
   const filteredFlows = dataFlows.filter((flow) => {
-    const matchesSearch = flow.source.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      flow.destination.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (flow.sourceSystem || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (flow.destinationSystem || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCrossBorder = crossBorderFilter === "all" || 
       (crossBorderFilter === "cross_border" && flow.crossBorder) ||
       (crossBorderFilter === "domestic" && !flow.crossBorder);
@@ -134,8 +128,8 @@ export default function DataMappingPage() {
                     <Building2 className="h-5 w-5 text-chart-4" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{dataFlows.filter(f => f.destinationType === "third_party").length}</p>
-                    <p className="text-xs text-muted-foreground">Third Party</p>
+                    <p className="text-2xl font-bold">{dataFlows.filter(f => f.sensitivity === "high" || f.sensitivity === "critical").length}</p>
+                    <p className="text-xs text-muted-foreground">High Sensitivity</p>
                   </div>
                 </div>
               </CardContent>
@@ -171,64 +165,77 @@ export default function DataMappingPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {filteredFlows.map((flow) => {
-                  const SourceIcon = typeIcons[flow.sourceType] || Database;
-                  const DestIcon = typeIcons[flow.destinationType] || Database;
-                  return (
-                    <Card key={flow.id} className="hover-elevate" data-testid={`flow-${flow.id}`}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-3 flex-1">
-                            <div className="p-3 rounded-lg bg-muted">
-                              <SourceIcon className="h-5 w-5 text-primary" />
+              {isLoading ? (
+                <div className="flex justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredFlows.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No data flows found. Add your first data flow mapping.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredFlows.map((flow) => {
+                    return (
+                      <Card key={flow.id} className="hover-elevate" data-testid={`flow-${flow.id}`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className="p-3 rounded-lg bg-muted">
+                                <Database className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{flow.sourceSystem}</p>
+                                <p className="text-xs text-muted-foreground">Source System</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium">{flow.source}</p>
-                              <p className="text-xs text-muted-foreground capitalize">{flow.sourceType.replace("_", " ")}</p>
-                            </div>
-                          </div>
 
-                          <div className="flex flex-col items-center gap-1 px-4">
-                            <ArrowRight className="h-5 w-5 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">{flow.transferMechanism}</span>
-                          </div>
-
-                          <div className="flex items-center gap-3 flex-1">
-                            <div className="p-3 rounded-lg bg-muted">
-                              <DestIcon className="h-5 w-5 text-primary" />
+                            <div className="flex flex-col items-center gap-1 px-4">
+                              <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">{flow.transferMethod || 'API'}</span>
                             </div>
-                            <div>
-                              <p className="font-medium">{flow.destination}</p>
-                              <p className="text-xs text-muted-foreground capitalize">{flow.destinationType.replace("_", " ")}</p>
-                            </div>
-                          </div>
 
-                          <div className="flex flex-col items-end gap-2">
-                            <div className="flex gap-1 flex-wrap justify-end">
-                              {flow.dataTypes.map((type) => (
-                                <Badge key={type} variant="outline" className="text-xs">
-                                  {type}
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className="p-3 rounded-lg bg-muted">
+                                <Server className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{flow.destinationSystem}</p>
+                                <p className="text-xs text-muted-foreground">Destination System</p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-2">
+                              <div className="flex gap-1 flex-wrap justify-end">
+                                {(flow.dataTypes || []).map((type) => (
+                                  <Badge key={type} variant="outline" className="text-xs">
+                                    {type}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge className={flow.crossBorder ? "bg-chart-3/20 text-chart-3 border-0" : "bg-chart-2/20 text-chart-2 border-0"}>
+                                  {flow.crossBorder ? "Cross-Border" : "Domestic"}
                                 </Badge>
-                              ))}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge className={flow.crossBorder ? "bg-chart-3/20 text-chart-3 border-0" : "bg-chart-2/20 text-chart-2 border-0"}>
-                                {flow.crossBorder ? "Cross-Border" : "Domestic"}
-                              </Badge>
+                                {flow.sensitivity && (
+                                  <Badge variant="outline" className="text-xs capitalize">
+                                    {flow.sensitivity}
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="mt-3 pt-3 border-t border-border">
-                          <p className="text-sm text-muted-foreground">
-                            <span className="font-medium">Purpose:</span> {flow.purpose}
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                          {flow.description && (
+                            <div className="mt-3 pt-3 border-t border-border">
+                              <p className="text-sm text-muted-foreground">{flow.description}</p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTenant } from "@/contexts/tenant-context";
+import type { Dpia } from "@shared/schema";
 import {
   Plus,
   Search,
@@ -11,6 +14,7 @@ import {
   Edit,
   MoreHorizontal,
   Target,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,32 +44,11 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-interface DPIA {
-  id: string;
-  name: string;
-  project: string;
-  riskLevel: string;
-  status: string;
-  owner: string;
-  createdAt: string;
-  completedAt?: string;
-  description?: string;
-  residualRisk: number;
-}
-
-const mockDPIAs: DPIA[] = [
-  { id: "DPIA-001", name: "Customer Analytics Platform", project: "Marketing Transformation", riskLevel: "high", status: "in_progress", owner: "Privacy Team", createdAt: "2026-01-10", description: "Assessment for new customer behavior analytics", residualRisk: 65 },
-  { id: "DPIA-002", name: "Employee Monitoring System", project: "Remote Work Initiative", riskLevel: "critical", status: "pending_review", owner: "HR & Privacy", createdAt: "2026-01-05", description: "Assessment for productivity monitoring tools", residualRisk: 80 },
-  { id: "DPIA-003", name: "Biometric Access Control", project: "Security Enhancement", riskLevel: "high", status: "approved", owner: "Security Team", createdAt: "2025-12-15", completedAt: "2026-01-20", description: "Fingerprint and facial recognition for facility access", residualRisk: 35 },
-  { id: "DPIA-004", name: "Mobile App v3.0", project: "Digital Experience", riskLevel: "medium", status: "approved", owner: "Product Team", createdAt: "2025-11-20", completedAt: "2025-12-30", description: "New features collecting location and device data", residualRisk: 25 },
-  { id: "DPIA-005", name: "AI Chatbot Implementation", project: "Customer Service AI", riskLevel: "high", status: "draft", owner: "AI Team", createdAt: "2026-01-25", description: "Conversational AI processing customer queries", residualRisk: 70 },
-];
-
 const statusStyles: Record<string, { bg: string; text: string }> = {
   draft: { bg: "bg-muted", text: "text-muted-foreground" },
-  in_progress: { bg: "bg-chart-1/20", text: "text-chart-1" },
-  pending_review: { bg: "bg-chart-3/20", text: "text-chart-3" },
+  in_review: { bg: "bg-chart-3/20", text: "text-chart-3" },
   approved: { bg: "bg-chart-2/20", text: "text-chart-2" },
+  requires_mitigation: { bg: "bg-chart-1/20", text: "text-chart-1" },
   rejected: { bg: "bg-destructive/20", text: "text-destructive" },
 };
 
@@ -78,22 +61,38 @@ const riskLevelStyles: Record<string, { bg: string; text: string }> = {
 
 export default function DPIAPage() {
   const { toast } = useToast();
+  const { currentTenant } = useTenant();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [riskFilter, setRiskFilter] = useState("all");
 
-  const filteredDPIAs = mockDPIAs.filter((dpia) => {
-    const matchesSearch = dpia.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      dpia.project.toLowerCase().includes(searchQuery.toLowerCase());
+  const { data: dpias = [], isLoading } = useQuery<Dpia[]>({
+    queryKey: ["/api/dpias", currentTenant?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/dpias?tenantId=${currentTenant?.id}`);
+      if (!response.ok) throw new Error("Failed to fetch DPIAs");
+      return response.json();
+    },
+    enabled: !!currentTenant?.id,
+  });
+
+  const formatDate = (date: Date | null) => {
+    if (!date) return '-';
+    return new Date(date).toLocaleDateString();
+  };
+
+  const filteredDPIAs = dpias.filter((dpia) => {
+    const matchesSearch = (dpia.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (dpia.projectName || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || dpia.status === statusFilter;
-    const matchesRisk = riskFilter === "all" || dpia.riskLevel === riskFilter;
+    const matchesRisk = riskFilter === "all" || dpia.overallRiskLevel === riskFilter;
     return matchesSearch && matchesStatus && matchesRisk;
   });
 
-  const draftCount = mockDPIAs.filter(d => d.status === "draft").length;
-  const inProgressCount = mockDPIAs.filter(d => d.status === "in_progress" || d.status === "pending_review").length;
-  const approvedCount = mockDPIAs.filter(d => d.status === "approved").length;
-  const highRiskCount = mockDPIAs.filter(d => d.riskLevel === "high" || d.riskLevel === "critical").length;
+  const draftCount = dpias.filter(d => d.status === "draft").length;
+  const inReviewCount = dpias.filter(d => d.status === "in_review" || d.status === "requires_mitigation").length;
+  const approvedCount = dpias.filter(d => d.status === "approved").length;
+  const highRiskCount = dpias.filter(d => d.overallRiskLevel === "high" || d.overallRiskLevel === "critical").length;
 
   return (
     <div className="flex-1 overflow-auto">
@@ -120,7 +119,7 @@ export default function DPIAPage() {
                     <FileText className="h-5 w-5 text-chart-1" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{mockDPIAs.length}</p>
+                    <p className="text-2xl font-bold">{dpias.length}</p>
                     <p className="text-xs text-muted-foreground">Total DPIAs</p>
                   </div>
                 </div>
@@ -133,8 +132,8 @@ export default function DPIAPage() {
                     <Clock className="h-5 w-5 text-chart-3" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{inProgressCount}</p>
-                    <p className="text-xs text-muted-foreground">In Progress</p>
+                    <p className="text-2xl font-bold">{inReviewCount}</p>
+                    <p className="text-xs text-muted-foreground">In Review</p>
                   </div>
                 </div>
               </CardContent>
@@ -189,9 +188,10 @@ export default function DPIAPage() {
                     <SelectContent>
                       <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="pending_review">Pending Review</SelectItem>
+                      <SelectItem value="in_review">In Review</SelectItem>
+                      <SelectItem value="requires_mitigation">Requires Mitigation</SelectItem>
                       <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={riskFilter} onValueChange={setRiskFilter}>
@@ -223,55 +223,70 @@ export default function DPIAPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredDPIAs.map((dpia) => {
-                    const statusStyle = statusStyles[dpia.status] || statusStyles.draft;
-                    const riskStyle = riskLevelStyles[dpia.riskLevel] || riskLevelStyles.medium;
-                    return (
-                      <TableRow key={dpia.id} data-testid={`row-dpia-${dpia.id}`}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{dpia.name}</p>
-                            <p className="text-xs text-muted-foreground">{dpia.id}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>{dpia.project}</TableCell>
-                        <TableCell>
-                          <Badge className={`${riskStyle.bg} ${riskStyle.text} border-0 capitalize`}>
-                            {dpia.riskLevel}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={`${statusStyle.bg} ${statusStyle.text} border-0 capitalize`}>
-                            {dpia.status.replace("_", " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 w-32">
-                            <Progress value={100 - dpia.residualRisk} className="h-2" />
-                            <span className="text-xs font-medium">{dpia.residualRisk}%</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{dpia.owner}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => toast({ title: "View details coming soon" })}>
-                                <Eye className="h-4 w-4 mr-2" /> View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => toast({ title: "Edit coming soon" })}>
-                                <Edit className="h-4 w-4 mr-2" /> Edit
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredDPIAs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        No DPIAs found. Create your first Data Protection Impact Assessment.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredDPIAs.map((dpia) => {
+                      const statusStyle = statusStyles[dpia.status || 'draft'] || statusStyles.draft;
+                      const riskStyle = riskLevelStyles[dpia.overallRiskLevel || 'medium'] || riskLevelStyles.medium;
+                      const residualRisk = dpia.residualRiskScore || 0;
+                      return (
+                        <TableRow key={dpia.id} data-testid={`row-dpia-${dpia.id}`}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{dpia.title}</p>
+                              <p className="text-xs text-muted-foreground">{dpia.id}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>{dpia.projectName || '-'}</TableCell>
+                          <TableCell>
+                            <Badge className={`${riskStyle.bg} ${riskStyle.text} border-0 capitalize`}>
+                              {dpia.overallRiskLevel || 'medium'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={`${statusStyle.bg} ${statusStyle.text} border-0 capitalize`}>
+                              {(dpia.status || 'draft').replace("_", " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 w-32">
+                              <Progress value={100 - residualRisk} className="h-2" />
+                              <span className="text-xs font-medium">{residualRisk}%</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{dpia.leadAssessorId || '-'}</TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => toast({ title: "View details coming soon" })}>
+                                  <Eye className="h-4 w-4 mr-2" /> View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => toast({ title: "Edit coming soon" })}>
+                                  <Edit className="h-4 w-4 mr-2" /> Edit
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

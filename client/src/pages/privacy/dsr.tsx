@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTenant } from "@/contexts/tenant-context";
+import type { DsrRequest } from "@shared/schema";
 import {
   Plus,
   Search,
@@ -14,6 +17,8 @@ import {
   Calendar,
   Download,
   Trash2,
+  Loader2,
+  FileX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,32 +48,14 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-interface DSRRequest {
-  id: string;
-  requesterId: string;
-  requesterEmail: string;
-  requesterName: string;
-  requestType: string;
-  status: string;
-  submittedAt: string;
-  dueDate: string;
-  assignee: string;
-  description?: string;
-}
-
-const mockRequests: DSRRequest[] = [
-  { id: "DSR-001", requesterId: "USR001", requesterEmail: "john.doe@example.com", requesterName: "John Doe", requestType: "access", status: "in_progress", submittedAt: "2026-01-15", dueDate: "2026-02-14", assignee: "Privacy Team", description: "Request for all personal data" },
-  { id: "DSR-002", requesterId: "USR002", requesterEmail: "jane.smith@example.com", requesterName: "Jane Smith", requestType: "deletion", status: "pending", submittedAt: "2026-01-20", dueDate: "2026-02-19", assignee: "Privacy Team", description: "Right to be forgotten request" },
-  { id: "DSR-003", requesterId: "USR003", requesterEmail: "bob.wilson@example.com", requesterName: "Bob Wilson", requestType: "portability", status: "completed", submittedAt: "2026-01-05", dueDate: "2026-02-04", assignee: "Data Team", description: "Export all data in machine-readable format" },
-  { id: "DSR-004", requesterId: "USR004", requesterEmail: "alice.johnson@example.com", requesterName: "Alice Johnson", requestType: "rectification", status: "in_progress", submittedAt: "2026-01-18", dueDate: "2026-02-17", assignee: "Privacy Team", description: "Correct incorrect address information" },
-  { id: "DSR-005", requesterId: "USR005", requesterEmail: "charlie.brown@example.com", requesterName: "Charlie Brown", requestType: "objection", status: "rejected", submittedAt: "2026-01-10", dueDate: "2026-02-09", assignee: "Legal Team", description: "Objection to marketing processing" },
-];
-
 const statusStyles: Record<string, { bg: string; text: string; icon: any }> = {
-  pending: { bg: "bg-chart-1/20", text: "text-chart-1", icon: Clock },
+  submitted: { bg: "bg-chart-1/20", text: "text-chart-1", icon: Clock },
+  verified: { bg: "bg-chart-4/20", text: "text-chart-4", icon: CheckCircle2 },
   in_progress: { bg: "bg-chart-3/20", text: "text-chart-3", icon: AlertCircle },
+  pending_approval: { bg: "bg-amber-500/20", text: "text-amber-400", icon: Clock },
   completed: { bg: "bg-chart-2/20", text: "text-chart-2", icon: CheckCircle2 },
   rejected: { bg: "bg-destructive/20", text: "text-destructive", icon: XCircle },
+  cancelled: { bg: "bg-muted", text: "text-muted-foreground", icon: XCircle },
 };
 
 const requestTypeLabels: Record<string, string> = {
@@ -91,28 +78,45 @@ const requestTypeIcons: Record<string, any> = {
 
 export default function DSRPortalPage() {
   const { toast } = useToast();
+  const { currentTenant } = useTenant();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
 
-  const filteredRequests = mockRequests.filter((request) => {
-    const matchesSearch = request.requesterEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.requesterName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const { data: requests = [], isLoading } = useQuery<DsrRequest[]>({
+    queryKey: ['/api/dsr-requests', currentTenant?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/dsr-requests?tenantId=${currentTenant?.id || ''}`);
+      if (!res.ok) throw new Error('Failed to fetch DSR requests');
+      return res.json();
+    },
+    enabled: !!currentTenant?.id,
+  });
+
+  const filteredRequests = requests.filter((request) => {
+    const matchesSearch = (request.dataSubjectEmail || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (request.dataSubjectName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       request.id.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || request.status === statusFilter;
     const matchesType = typeFilter === "all" || request.requestType === typeFilter;
     return matchesSearch && matchesStatus && matchesType;
   });
 
-  const pendingCount = mockRequests.filter(r => r.status === "pending").length;
-  const inProgressCount = mockRequests.filter(r => r.status === "in_progress").length;
-  const completedCount = mockRequests.filter(r => r.status === "completed").length;
+  const submittedCount = requests.filter(r => r.status === "submitted").length;
+  const inProgressCount = requests.filter(r => r.status === "in_progress").length;
+  const completedCount = requests.filter(r => r.status === "completed").length;
 
-  const getDaysRemaining = (dueDate: string) => {
+  const getDaysRemaining = (dueDate: Date | null) => {
+    if (!dueDate) return 30;
     const due = new Date(dueDate);
     const now = new Date();
     const diff = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     return diff;
+  };
+
+  const formatDate = (date: Date | null) => {
+    if (!date) return '-';
+    return new Date(date).toLocaleDateString();
   };
 
   return (
@@ -140,7 +144,7 @@ export default function DSRPortalPage() {
                     <Mail className="h-5 w-5 text-chart-1" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{mockRequests.length}</p>
+                    <p className="text-2xl font-bold">{requests.length}</p>
                     <p className="text-xs text-muted-foreground">Total Requests</p>
                   </div>
                 </div>
@@ -153,7 +157,7 @@ export default function DSRPortalPage() {
                     <Clock className="h-5 w-5 text-chart-3" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{pendingCount + inProgressCount}</p>
+                    <p className="text-2xl font-bold">{submittedCount + inProgressCount}</p>
                     <p className="text-xs text-muted-foreground">Open Requests</p>
                   </div>
                 </div>
@@ -245,7 +249,7 @@ export default function DSRPortalPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredRequests.map((request) => {
-                    const style = statusStyles[request.status] || statusStyles.pending;
+                    const style = statusStyles[request.status || 'submitted'] || statusStyles.submitted;
                     const StatusIcon = style.icon;
                     const TypeIcon = requestTypeIcons[request.requestType] || Eye;
                     const daysRemaining = getDaysRemaining(request.dueDate);
@@ -260,8 +264,8 @@ export default function DSRPortalPage() {
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <p className="font-medium">{request.requesterName}</p>
-                              <p className="text-xs text-muted-foreground">{request.requesterEmail}</p>
+                              <p className="font-medium">{request.dataSubjectName}</p>
+                              <p className="text-xs text-muted-foreground">{request.dataSubjectEmail}</p>
                             </div>
                           </div>
                         </TableCell>
@@ -274,13 +278,13 @@ export default function DSRPortalPage() {
                         <TableCell>
                           <Badge className={`${style.bg} ${style.text} border-0 capitalize`}>
                             <StatusIcon className="h-3 w-3 mr-1" />
-                            {request.status.replace("_", " ")}
+                            {(request.status || 'submitted').replace("_", " ")}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
                             <span className={isOverdue ? "text-destructive font-medium" : isUrgent ? "text-chart-3 font-medium" : ""}>
-                              {request.dueDate}
+                              {formatDate(request.dueDate)}
                             </span>
                             {request.status !== "completed" && request.status !== "rejected" && (
                               <span className={`text-xs ${isOverdue ? "text-destructive" : isUrgent ? "text-chart-3" : "text-muted-foreground"}`}>
@@ -289,7 +293,7 @@ export default function DSRPortalPage() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>{request.assignee}</TableCell>
+                        <TableCell>{request.assigneeId || 'Unassigned'}</TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

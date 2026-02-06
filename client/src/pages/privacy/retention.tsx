@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTenant } from "@/contexts/tenant-context";
+import type { RetentionPolicy } from "@shared/schema";
 import {
   Plus,
   Search,
@@ -12,6 +15,7 @@ import {
   MoreHorizontal,
   Trash2,
   Archive,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,48 +45,50 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-interface RetentionPolicy {
-  id: string;
-  dataCategory: string;
-  retentionPeriod: string;
-  legalBasis: string;
-  status: string;
-  nextReview: string;
-  recordCount: number;
-  expiringRecords: number;
-  owner: string;
-}
-
-const mockPolicies: RetentionPolicy[] = [
-  { id: "RET-001", dataCategory: "Customer Records", retentionPeriod: "7 years", legalBasis: "Legal Requirement", status: "active", nextReview: "2026-06-15", recordCount: 125000, expiringRecords: 3500, owner: "Data Governance" },
-  { id: "RET-002", dataCategory: "Employee Data", retentionPeriod: "Employment + 7 years", legalBasis: "Legal Requirement", status: "active", nextReview: "2026-03-20", recordCount: 5000, expiringRecords: 120, owner: "HR" },
-  { id: "RET-003", dataCategory: "Marketing Consents", retentionPeriod: "3 years", legalBasis: "Consent", status: "active", nextReview: "2026-05-01", recordCount: 85000, expiringRecords: 12000, owner: "Marketing" },
-  { id: "RET-004", dataCategory: "Financial Transactions", retentionPeriod: "10 years", legalBasis: "Legal Requirement", status: "active", nextReview: "2026-12-31", recordCount: 500000, expiringRecords: 8000, owner: "Finance" },
-  { id: "RET-005", dataCategory: "Website Analytics", retentionPeriod: "2 years", legalBasis: "Legitimate Interest", status: "review_needed", nextReview: "2026-02-01", recordCount: 2000000, expiringRecords: 250000, owner: "Digital" },
-  { id: "RET-006", dataCategory: "Support Tickets", retentionPeriod: "5 years", legalBasis: "Contract", status: "active", nextReview: "2026-08-15", recordCount: 75000, expiringRecords: 5000, owner: "Support" },
-];
-
 const statusStyles: Record<string, { bg: string; text: string }> = {
   active: { bg: "bg-chart-2/20", text: "text-chart-2" },
-  review_needed: { bg: "bg-chart-3/20", text: "text-chart-3" },
-  expired: { bg: "bg-destructive/20", text: "text-destructive" },
-  draft: { bg: "bg-muted", text: "text-muted-foreground" },
+  inactive: { bg: "bg-muted", text: "text-muted-foreground" },
+  draft: { bg: "bg-chart-1/20", text: "text-chart-1" },
+  pending: { bg: "bg-chart-3/20", text: "text-chart-3" },
 };
 
 export default function RetentionPoliciesPage() {
   const { toast } = useToast();
+  const { currentTenant } = useTenant();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const filteredPolicies = mockPolicies.filter((policy) => {
-    const matchesSearch = policy.dataCategory.toLowerCase().includes(searchQuery.toLowerCase());
+  const { data: policies = [], isLoading } = useQuery<RetentionPolicy[]>({
+    queryKey: ["/api/retention-policies", currentTenant?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/retention-policies?tenantId=${currentTenant?.id}`);
+      if (!response.ok) throw new Error("Failed to fetch retention policies");
+      return response.json();
+    },
+    enabled: !!currentTenant?.id,
+  });
+
+  const formatDate = (date: Date | null) => {
+    if (!date) return '-';
+    return new Date(date).toLocaleDateString();
+  };
+
+  const formatRetentionPeriod = (days: number | null) => {
+    if (!days) return '-';
+    if (days < 365) return `${days} days`;
+    return `${Math.round(days / 365)} years`;
+  };
+
+  const filteredPolicies = policies.filter((policy) => {
+    const matchesSearch = (policy.dataCategory || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (policy.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || policy.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const totalRecords = mockPolicies.reduce((acc, p) => acc + p.recordCount, 0);
-  const expiringRecords = mockPolicies.reduce((acc, p) => acc + p.expiringRecords, 0);
-  const reviewNeeded = mockPolicies.filter(p => p.status === "review_needed").length;
+  const totalRecords = policies.reduce((acc, p) => acc + (p.recordsProcessed || 0), 0);
+  const archivedRecords = policies.reduce((acc, p) => acc + (p.recordsArchived || 0), 0);
+  const pendingPolicies = policies.filter(p => p.status === "pending").length;
 
   return (
     <div className="flex-1 overflow-auto">
@@ -122,8 +128,8 @@ export default function RetentionPoliciesPage() {
                     <Clock className="h-5 w-5 text-chart-3" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{(expiringRecords / 1000).toFixed(0)}K</p>
-                    <p className="text-xs text-muted-foreground">Expiring Soon</p>
+                    <p className="text-2xl font-bold">{(archivedRecords / 1000).toFixed(0)}K</p>
+                    <p className="text-xs text-muted-foreground">Archived</p>
                   </div>
                 </div>
               </CardContent>
@@ -135,7 +141,7 @@ export default function RetentionPoliciesPage() {
                     <CheckCircle2 className="h-5 w-5 text-chart-2" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{mockPolicies.length}</p>
+                    <p className="text-2xl font-bold">{policies.filter(p => p.status === "active").length}</p>
                     <p className="text-xs text-muted-foreground">Active Policies</p>
                   </div>
                 </div>
@@ -148,8 +154,8 @@ export default function RetentionPoliciesPage() {
                     <AlertTriangle className="h-5 w-5 text-destructive" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{reviewNeeded}</p>
-                    <p className="text-xs text-muted-foreground">Review Needed</p>
+                    <p className="text-2xl font-bold">{pendingPolicies}</p>
+                    <p className="text-xs text-muted-foreground">Pending</p>
                   </div>
                 </div>
               </CardContent>
@@ -178,8 +184,8 @@ export default function RetentionPoliciesPage() {
                     <SelectContent>
                       <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="review_needed">Review Needed</SelectItem>
-                      <SelectItem value="expired">Expired</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -193,73 +199,85 @@ export default function RetentionPoliciesPage() {
                     <TableHead>Retention Period</TableHead>
                     <TableHead>Legal Basis</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Records</TableHead>
-                    <TableHead>Expiring</TableHead>
-                    <TableHead>Next Review</TableHead>
+                    <TableHead>Processed</TableHead>
+                    <TableHead>Deleted</TableHead>
+                    <TableHead>Next Execution</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPolicies.map((policy) => {
-                    const statusStyle = statusStyles[policy.status] || statusStyles.active;
-                    const expiringPercent = (policy.expiringRecords / policy.recordCount) * 100;
-                    return (
-                      <TableRow key={policy.id} data-testid={`row-policy-${policy.id}`}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Archive className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="font-medium">{policy.dataCategory}</p>
-                              <p className="text-xs text-muted-foreground">{policy.owner}</p>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredPolicies.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        No retention policies found. Create your first data retention policy.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredPolicies.map((policy) => {
+                      const statusStyle = statusStyles[policy.status || 'active'] || statusStyles.active;
+                      const recordsProcessed = policy.recordsProcessed || 0;
+                      const recordsDeleted = policy.recordsDeleted || 0;
+                      return (
+                        <TableRow key={policy.id} data-testid={`row-policy-${policy.id}`}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Archive className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <p className="font-medium">{policy.name}</p>
+                                <p className="text-xs text-muted-foreground">{policy.dataCategory}</p>
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>{policy.retentionPeriod}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-normal">
-                            {policy.legalBasis}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={`${statusStyle.bg} ${statusStyle.text} border-0 capitalize`}>
-                            {policy.status.replace("_", " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{policy.recordCount.toLocaleString()}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className={expiringPercent > 10 ? "text-chart-3 font-medium" : ""}>
-                              {policy.expiringRecords.toLocaleString()}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              ({expiringPercent.toFixed(1)}%)
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{policy.nextReview}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => toast({ title: "View details coming soon" })}>
-                                <Eye className="h-4 w-4 mr-2" /> View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => toast({ title: "Edit coming soon" })}>
-                                <Edit className="h-4 w-4 mr-2" /> Edit Policy
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => toast({ title: "Disposal review coming soon" })}>
-                                <Trash2 className="h-4 w-4 mr-2" /> Run Disposal
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                          </TableCell>
+                          <TableCell>{formatRetentionPeriod(policy.retentionPeriodDays)}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-normal">
+                              {policy.legalBasis || 'Not specified'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={`${statusStyle.bg} ${statusStyle.text} border-0 capitalize`}>
+                              {(policy.status || 'active').replace("_", " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{recordsProcessed.toLocaleString()}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className={recordsDeleted > 0 ? "text-chart-3 font-medium" : ""}>
+                                {recordsDeleted.toLocaleString()}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{formatDate(policy.nextExecutionAt)}</TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => toast({ title: "View details coming soon" })}>
+                                  <Eye className="h-4 w-4 mr-2" /> View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => toast({ title: "Edit coming soon" })}>
+                                  <Edit className="h-4 w-4 mr-2" /> Edit Policy
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => toast({ title: "Disposal review coming soon" })}>
+                                  <Trash2 className="h-4 w-4 mr-2" /> Run Disposal
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

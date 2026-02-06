@@ -18,7 +18,17 @@ import {
   Trash2,
   Power,
   RefreshCw,
+  Activity,
+  BookOpen,
+  ExternalLink,
+  Clock,
 } from "lucide-react";
+import { 
+  SiAmazonwebservices, SiGooglecloud, SiOkta, SiAuth0,
+  SiGithub, SiGitlab, SiJira, SiSplunk, SiSlack,
+  SiZendesk, SiElasticsearch, SiGoogle, SiSendgrid, SiMailgun
+} from "react-icons/si";
+import { getProviderByName } from "@/lib/integration-providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -99,6 +109,84 @@ const integrationFormSchema = z.object({
 
 type IntegrationFormValues = z.infer<typeof integrationFormSchema>;
 
+const providerIcons: Record<string, any> = {
+  "Microsoft 365": Mail,
+  "Google Workspace": SiGoogle,
+  "SendGrid": SiSendgrid,
+  "Mailgun": SiMailgun,
+  "Amazon SES": SiAmazonwebservices,
+  "SMTP": Mail,
+  "Okta": SiOkta,
+  "Azure AD": Key,
+  "Auth0": SiAuth0,
+  "Ping Identity": Key,
+  "OneLogin": Key,
+  "JumpCloud": Key,
+  "ServiceNow": Ticket,
+  "Jira Service Management": SiJira,
+  "Zendesk": SiZendesk,
+  "Freshservice": Ticket,
+  "BMC Helix": Ticket,
+  "ManageEngine": Ticket,
+  "CrowdStrike": Shield,
+  "SentinelOne": Shield,
+  "Microsoft Defender": Shield,
+  "Carbon Black": Shield,
+  "Sophos": Shield,
+  "Trend Micro": Shield,
+  "Splunk": SiSplunk,
+  "Microsoft Sentinel": Database,
+  "IBM QRadar": Database,
+  "Elastic SIEM": SiElasticsearch,
+  "LogRhythm": Database,
+  "Sumo Logic": Database,
+  "Tenable": Bug,
+  "Qualys": Bug,
+  "Rapid7": Bug,
+  "Nessus": Bug,
+  "OpenVAS": Bug,
+  "Burp Suite": Bug,
+};
+
+const providerColors: Record<string, string> = {
+  "Microsoft 365": "#0078D4",
+  "Google Workspace": "#4285F4",
+  "SendGrid": "#1A82E2",
+  "Mailgun": "#F06B66",
+  "Amazon SES": "#FF9900",
+  "SMTP": "#6366F1",
+  "Okta": "#007DC1",
+  "Azure AD": "#0078D4",
+  "Auth0": "#EB5424",
+  "Ping Identity": "#B30838",
+  "OneLogin": "#0070C0",
+  "JumpCloud": "#0E7FB0",
+  "ServiceNow": "#62D84E",
+  "Jira Service Management": "#0052CC",
+  "Zendesk": "#03363D",
+  "Freshservice": "#14C38E",
+  "BMC Helix": "#F26522",
+  "ManageEngine": "#E84B3C",
+  "CrowdStrike": "#FF0000",
+  "SentinelOne": "#6B2C91",
+  "Microsoft Defender": "#0078D4",
+  "Carbon Black": "#00C7B7",
+  "Sophos": "#0080FF",
+  "Trend Micro": "#D71920",
+  "Splunk": "#65A637",
+  "Microsoft Sentinel": "#0078D4",
+  "IBM QRadar": "#054ADA",
+  "Elastic SIEM": "#FEC514",
+  "LogRhythm": "#FF6B00",
+  "Sumo Logic": "#000099",
+  "Tenable": "#00C389",
+  "Qualys": "#ED1C24",
+  "Rapid7": "#FF6600",
+  "Nessus": "#00B2E2",
+  "OpenVAS": "#00AA00",
+  "Burp Suite": "#FF6633",
+};
+
 function IntegrationCard({ 
   setting, 
   onEdit, 
@@ -111,15 +199,23 @@ function IntegrationCard({
   onToggle: () => void;
 }) {
   const typeInfo = integrationTypes[setting.integrationType as keyof typeof integrationTypes];
-  const Icon = typeInfo?.icon || Settings2;
+  const ProviderIcon = providerIcons[setting.provider] || typeInfo?.icon || Settings2;
+  const providerColor = providerColors[setting.provider] || "#6366F1";
+  const providerInfo = getProviderByName(setting.provider);
 
   return (
-    <Card className="glass-card" data-testid={`integration-card-${setting.id}`}>
+    <Card className="glass-card hover-elevate transition-all" data-testid={`integration-card-${setting.id}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${setting.isEnabled ? 'bg-chart-2/10' : 'bg-muted'}`}>
-              <Icon className={`h-5 w-5 ${setting.isEnabled ? 'text-chart-2' : 'text-muted-foreground'}`} />
+            <div 
+              className="p-2.5 rounded-lg"
+              style={{ backgroundColor: `${providerColor}20` }}
+            >
+              <ProviderIcon 
+                className="h-5 w-5" 
+                style={{ color: setting.isEnabled ? providerColor : undefined }}
+              />
             </div>
             <div>
               <CardTitle className="text-base font-semibold">{setting.name}</CardTitle>
@@ -134,7 +230,7 @@ function IntegrationCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-2">
           <Badge variant="outline" className="text-xs">
             {typeInfo?.label || setting.integrationType}
           </Badge>
@@ -147,6 +243,40 @@ function IntegrationCard({
             </Button>
           </div>
         </div>
+        
+        {providerInfo && (
+          <div className="space-y-2 pt-2 border-t border-border/30">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Clock className="w-3 h-3" />
+              Setup: {providerInfo.estimatedSetupTime}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {providerInfo.features.slice(0, 2).map((feature, i) => (
+                <Badge key={i} variant="secondary" className="text-xs">
+                  {feature}
+                </Badge>
+              ))}
+              {providerInfo.features.length > 2 && (
+                <Badge variant="secondary" className="text-xs">
+                  +{providerInfo.features.length - 2}
+                </Badge>
+              )}
+            </div>
+            {providerInfo.apiDocUrl && (
+              <a 
+                href={providerInfo.apiDocUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <BookOpen className="w-3 h-3" />
+                API Docs
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            )}
+          </div>
+        )}
+        
         {setting.lastSyncAt && (
           <p className="text-xs text-muted-foreground mt-2">
             Last synced: {new Date(setting.lastSyncAt).toLocaleString()}

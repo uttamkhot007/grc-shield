@@ -301,7 +301,7 @@ export default function LoginPage() {
                       id="username"
                       data-testid="input-username"
                       placeholder="dash@ui8.net"
-                      className="pl-11 h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400 focus:ring-violet-400/20"
+                      className="pl-11 h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400 focus:ring-violet-400/20 text-slate-800"
                       value={formData.username}
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                       required
@@ -323,7 +323,7 @@ export default function LoginPage() {
                       data-testid="input-password"
                       type={showPassword ? "text" : "password"}
                       placeholder="Password"
-                      className="pl-11 pr-11 h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400 focus:ring-violet-400/20"
+                      className="pl-11 pr-11 h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400 focus:ring-violet-400/20 text-slate-800"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       required
@@ -367,7 +367,7 @@ export default function LoginPage() {
                       id="mfaCode"
                       data-testid="input-mfa-code"
                       placeholder="000000"
-                      className="pl-11 text-center text-2xl tracking-widest h-14 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400"
+                      className="pl-11 text-center text-2xl tracking-widest h-14 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400 text-slate-800"
                       maxLength={6}
                       value={formData.mfaCode}
                       onChange={(e) => setFormData({ ...formData, mfaCode: e.target.value.replace(/\D/g, "") })}
@@ -420,7 +420,7 @@ export default function LoginPage() {
                       id="firstName"
                       data-testid="input-first-name"
                       placeholder="John"
-                      className="h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400"
+                      className="h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400 text-slate-800"
                       value={formData.firstName}
                       onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                     />
@@ -431,7 +431,7 @@ export default function LoginPage() {
                       id="lastName"
                       data-testid="input-last-name"
                       placeholder="Doe"
-                      className="h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400"
+                      className="h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400 text-slate-800"
                       value={formData.lastName}
                       onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                     />
@@ -446,7 +446,7 @@ export default function LoginPage() {
                       id="reg-username"
                       data-testid="input-reg-username"
                       placeholder="Choose a username"
-                      className="pl-11 h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400"
+                      className="pl-11 h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400 text-slate-800"
                       value={formData.username}
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                       required
@@ -463,7 +463,7 @@ export default function LoginPage() {
                       data-testid="input-email"
                       type="email"
                       placeholder="john@company.com"
-                      className="pl-11 h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400"
+                      className="pl-11 h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400 text-slate-800"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       required
@@ -480,7 +480,7 @@ export default function LoginPage() {
                       data-testid="input-reg-password"
                       type={showPassword ? "text" : "password"}
                       placeholder="Min. 8 characters"
-                      className="pl-11 pr-11 h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400"
+                      className="pl-11 pr-11 h-12 bg-white/80 border-slate-200 rounded-xl focus:border-violet-400 text-slate-800"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       required

@@ -21,18 +21,50 @@ export function TenantSwitcher() {
   useEffect(() => {
     if (fetchedTenants) {
       setTenants(fetchedTenants);
+      
+      // Check if current tenant is still valid for this user
+      const isCurrentTenantValid = currentTenantId && 
+        fetchedTenants.some(t => t.id === currentTenantId);
+      
+      if (!isCurrentTenantValid && fetchedTenants.length > 0) {
+        // Current tenant is not in user's available tenants, auto-select first one
+        setCurrentTenantId(fetchedTenants[0].id);
+      } else if (fetchedTenants.length === 0 && currentTenantId) {
+        // User has no tenants, clear selection
+        setCurrentTenantId(null);
+      }
     }
-  }, [fetchedTenants, setTenants]);
+  }, [fetchedTenants, setTenants, currentTenantId, setCurrentTenantId]);
 
-  if (isLoading || tenants.length === 0) {
+  if (isLoading) {
     return (
       <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md">
-        <Building2 className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Loading...</span>
+        <Building2 className="h-4 w-4 text-primary animate-pulse" />
+        <span className="text-sm text-muted-foreground">{currentTenant?.name || 'Loading...'}</span>
+      </div>
+    );
+  }
+  
+  if (tenants.length === 0) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md">
+        <Building2 className="h-4 w-4 text-primary" />
+        <span className="text-sm font-medium">{currentTenant?.name || 'No Organization'}</span>
       </div>
     );
   }
 
+  // If user has only one tenant, just display the name without dropdown
+  if (tenants.length === 1) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md" data-testid="text-tenant-name">
+        <Building2 className="h-4 w-4 text-primary" />
+        <span className="text-sm font-medium">{tenants[0].name}</span>
+      </div>
+    );
+  }
+
+  // Multiple tenants - show dropdown with "All Organizations" option
   return (
     <Select 
       value={currentTenantId || "all"} 

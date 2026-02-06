@@ -1,12 +1,13 @@
 {
   "name": "GRC Shield Mobile",
   "short_name": "GRC Shield",
-  "description": "Access your organization's policies and compliance alerts on the go",
-  "start_url": "/mobile",
+  "description": "Enterprise Governance, Risk & Compliance Platform - Mobile App for policies and alerts",
+  "start_url": "/app",
   "display": "standalone",
-  "background_color": "#0a0a0f",
-  "theme_color": "#6366f1",
+  "background_color": "#0f172a",
+  "theme_color": "#7c3aed",
   "orientation": "portrait-primary",
+  "scope": "/",
   "icons": [
     {
       "src": "/icon-192.png",

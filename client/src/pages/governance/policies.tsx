@@ -32,6 +32,15 @@ import {
   ClipboardCheck,
   ListChecks,
   FileSearch,
+  GitBranch,
+  Bell,
+  RefreshCw,
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  RotateCcw,
+  Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -112,6 +121,7 @@ import {
 import { useTenant } from "@/contexts/tenant-context";
 import type { Policy, Tenant, User as UserType } from "@shared/schema";
 import { ApprovalWorkflowDialog } from "@/components/ApprovalWorkflowDialog";
+import { PolicyWizard } from "@/components/PolicyWizard";
 
 const statusStyles = {
   approved: { bg: "bg-chart-2/20", text: "text-chart-2", icon: CheckCircle2 },
@@ -186,6 +196,7 @@ export default function PoliciesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isAiEnrichDialogOpen, setIsAiEnrichDialogOpen] = useState(false);
   const [isApprovalDialogOpen, setIsApprovalDialogOpen] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null);
   const [aiEnrichmentResult, setAiEnrichmentResult] = useState<string>("");
   const [aiEnrichmentType, setAiEnrichmentType] = useState<string>("enhance");
@@ -537,10 +548,16 @@ export default function PoliciesPage() {
                 Create, manage, and track organizational policies with approval workflows
               </p>
             </div>
-            <Button data-testid="button-create-policy" onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Policy
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" data-testid="button-policy-wizard" onClick={() => setIsWizardOpen(true)}>
+                <Wand2 className="h-4 w-4 mr-2" />
+                Policy Wizard
+              </Button>
+              <Button data-testid="button-create-policy" onClick={() => setIsCreateDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Quick Create
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -597,6 +614,115 @@ export default function PoliciesPage() {
               </CardContent>
             </Card>
           </div>
+          
+          {/* Policy Lifecycle Management Section */}
+          <Card className="card-3d border-primary/20">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-gradient-to-br from-primary/20 to-chart-4/20">
+                    <GitBranch className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Automated Policy Lifecycle Management</CardTitle>
+                    <CardDescription>Track policy stages, versions, and review schedules</CardDescription>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-primary/10 border-primary/30">
+                  <Zap className="h-3 w-3 mr-1" />
+                  Auto-managed
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Lifecycle Pipeline */}
+              <div className="flex items-center justify-between bg-muted/30 p-4 rounded-lg">
+                {[
+                  { stage: "Draft", icon: FileText, count: draftCount, color: "text-muted-foreground" },
+                  { stage: "Review", icon: Eye, count: pendingCount, color: "text-chart-3" },
+                  { stage: "Approval", icon: ClipboardCheck, count: policies.filter(p => p.status === "pending").length, color: "text-chart-1" },
+                  { stage: "Published", icon: CheckCircle2, count: approvedCount, color: "text-chart-2" },
+                  { stage: "Archive", icon: Archive, count: policies.filter(p => p.status === "rejected").length, color: "text-muted-foreground" },
+                ].map((item, idx) => (
+                  <div key={item.stage} className="flex items-center">
+                    <div className="text-center">
+                      <div className={`p-2 rounded-lg bg-background border ${item.count > 0 ? 'border-primary/30' : 'border-border'} mb-1`}>
+                        <item.icon className={`h-5 w-5 ${item.color}`} />
+                      </div>
+                      <p className="text-xs font-medium">{item.stage}</p>
+                      <p className={`text-lg font-bold ${item.color}`}>{isLoading ? "-" : item.count}</p>
+                    </div>
+                    {idx < 4 && (
+                      <ArrowRight className="h-4 w-4 text-muted-foreground mx-3" />
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Review Alerts & Expiration Notifications */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-3 rounded-lg bg-chart-3/10 border border-chart-3/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Bell className="h-4 w-4 text-chart-3" />
+                    <span className="text-sm font-medium">Review Reminders</span>
+                    <Badge variant="outline" className="ml-auto text-xs">{reviewDueCount} due</Badge>
+                  </div>
+                  <div className="space-y-1.5">
+                    {policies.filter(p => {
+                      if (!p.reviewDate) return false;
+                      const reviewDate = new Date(p.reviewDate);
+                      const now = new Date();
+                      const daysUntilReview = Math.ceil((reviewDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      return daysUntilReview <= 30 && daysUntilReview > 0;
+                    }).slice(0, 3).map(policy => (
+                      <div key={policy.id} className="flex items-center justify-between text-xs bg-background/50 p-2 rounded">
+                        <span className="font-medium truncate max-w-[60%]">{policy.title}</span>
+                        <span className="text-muted-foreground">
+                          {policy.reviewDate && `${Math.ceil((new Date(policy.reviewDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))}d`}
+                        </span>
+                      </div>
+                    ))}
+                    {reviewDueCount === 0 && (
+                      <p className="text-xs text-muted-foreground">No policies due for review</p>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-chart-1/10 border border-chart-1/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <History className="h-4 w-4 text-chart-1" />
+                    <span className="text-sm font-medium">Version History</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {policies.slice(0, 3).map(policy => (
+                      <div key={policy.id} className="flex items-center justify-between text-xs bg-background/50 p-2 rounded">
+                        <span className="font-medium truncate max-w-[60%]">{policy.title}</span>
+                        <Badge variant="outline" className="text-xs">v{policy.version || "1.0"}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Automation Actions */}
+              <div className="flex items-center justify-between pt-2 border-t border-border">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <RefreshCw className="h-3 w-3" />
+                  <span>Auto-check runs daily at 00:00 UTC</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="text-xs h-7">
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Run Check Now
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs h-7">
+                    <Bell className="h-3 w-3 mr-1" />
+                    Configure Alerts
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card className="card-3d">
             <CardHeader className="pb-4">
@@ -1340,6 +1466,16 @@ export default function PoliciesPage() {
           entityStatus={selectedPolicy.status || "draft"}
         />
       )}
+
+      {/* Policy Wizard Sheet */}
+      <Sheet open={isWizardOpen} onOpenChange={setIsWizardOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl p-0">
+          <PolicyWizard
+            onComplete={() => setIsWizardOpen(false)}
+            onCancel={() => setIsWizardOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

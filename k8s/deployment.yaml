@@ -1,0 +1,265 @@
+# GRC Shield - Kubernetes Deployment Configuration
+# Apply with: kubectl apply -f k8s/
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grc-shield
+
+---
+# ConfigMap for non-sensitive configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grc-shield-config
+  namespace: grc-shield
+data:
+  NODE_ENV: "production"
+  PORT: "5000"
+
+---
+# Secret for sensitive data (base64 encoded)
+# Replace with your actual values
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grc-shield-secrets
+  namespace: grc-shield
+type: Opaque
+stringData:
+  database-url: "postgresql://grcuser:password@grc-shield-db:5432/grcshield"
+  session-secret: "your-session-secret-here"
+
+---
+# PostgreSQL StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: grc-shield-db
+  namespace: grc-shield
+spec:
+  serviceName: grc-shield-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grc-shield-db
+  template:
+    metadata:
+      labels:
+        app: grc-shield-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: "grcuser"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: grc-shield-secrets
+              key: session-secret
+        - name: POSTGRES_DB
+          value: "grcshield"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - grcuser
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - grcuser
+          initialDelaySeconds: 5
+          periodSeconds: 5
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grc-shield-db
+  namespace: grc-shield
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: grc-shield-db
+  clusterIP: None
+
+---
+# Application Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grc-shield
+  namespace: grc-shield
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: grc-shield
+  template:
+    metadata:
+      labels:
+        app: grc-shield
+    spec:
+      containers:
+      - name: grc-shield
+        image: ghcr.io/uttamkhot007/grc-shield:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: grc-shield-config
+              key: NODE_ENV
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: grc-shield-config
+              key: PORT
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: grc-shield-secrets
+              key: database-url
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: grc-shield-secrets
+              key: session-secret
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      imagePullSecrets:
+      - name: ghcr-secret
+
+---
+# Application Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grc-shield
+  namespace: grc-shield
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+  selector:
+    app: grc-shield
+
+---
+# Ingress (for domain routing)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grc-shield-ingress
+  namespace: grc-shield
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  tls:
+  - hosts:
+    - grc-shield.com
+    - www.grc-shield.com
+    secretName: grc-shield-tls
+  rules:
+  - host: grc-shield.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grc-shield
+            port:
+              number: 80
+  - host: www.grc-shield.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grc-shield
+            port:
+              number: 80
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: grc-shield-hpa
+  namespace: grc-shield
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: grc-shield
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

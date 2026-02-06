@@ -35,7 +35,30 @@ import {
   AtSign,
   Play,
   Eye,
+  ImageIcon,
 } from "lucide-react";
+
+function TenantLogo({ logo, name, tenantId }: { logo?: string; name: string; tenantId: string }) {
+  const [imgError, setImgError] = useState(false);
+
+  if (!logo || imgError) {
+    return (
+      <div className="p-2 rounded-lg bg-primary/20" data-testid={`tenant-logo-fallback-${tenantId}`}>
+        <Factory className="h-5 w-5 text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={logo} 
+      alt={`${name} logo`}
+      className="h-10 w-10 rounded-lg object-contain bg-white/10"
+      onError={() => setImgError(true)}
+      data-testid={`tenant-logo-${tenantId}`}
+    />
+  );
+}
 
 export default function TenantsPage() {
   const { toast } = useToast();
@@ -51,6 +74,7 @@ export default function TenantsPage() {
     industry: "",
     size: "Mid-Market",
     status: "active" as "active" | "inactive" | "pending" | "completed" | "in_progress" | "draft" | "approved" | "rejected",
+    website: "",
   });
   const [inviteData, setInviteData] = useState({
     email: "",
@@ -194,6 +218,7 @@ export default function TenantsPage() {
   });
 
   const [enrichingTenantId, setEnrichingTenantId] = useState<string | null>(null);
+  const [enrichFromUrlId, setEnrichFromUrlId] = useState<string | null>(null);
   
   const aiEnrichMutation = useMutation({
     mutationFn: (id: string) => {
@@ -214,6 +239,26 @@ export default function TenantsPage() {
     },
   });
 
+  const enrichFromUrlMutation = useMutation({
+    mutationFn: ({ id, url }: { id: string; url?: string }) => {
+      setEnrichFromUrlId(id);
+      return apiRequest("POST", `/api/tenants/${id}/enrich-from-url`, url ? { url } : {});
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
+      const fieldsUpdated = data.fieldsUpdated?.length || 0;
+      toast({ 
+        title: "Tenant Enriched from Website", 
+        description: `Updated ${fieldsUpdated} fields including logo, description, and industry.`
+      });
+      setEnrichFromUrlId(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to enrich from URL", description: "Make sure the tenant has a website URL set.", variant: "destructive" });
+      setEnrichFromUrlId(null);
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       name: "",
@@ -222,6 +267,7 @@ export default function TenantsPage() {
       industry: "",
       size: "Mid-Market",
       status: "active",
+      website: "",
     });
   };
 
@@ -234,6 +280,7 @@ export default function TenantsPage() {
       industry: tenant.industry || "",
       size: tenant.size || "Mid-Market",
       status: tenant.status || "active",
+      website: (tenant as any).website || "",
     });
   };
 
@@ -433,6 +480,20 @@ export default function TenantsPage() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="website">Website URL</Label>
+                <Input
+                  id="website"
+                  value={formData.website}
+                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                  placeholder="https://example.com"
+                  data-testid="input-tenant-website"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used to fetch logo and organization details automatically
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="region">Region</Label>
@@ -603,9 +664,11 @@ export default function TenantsPage() {
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-primary/20">
-                          <Factory className="h-5 w-5 text-primary" />
-                        </div>
+                        <TenantLogo 
+                          logo={(tenant as any).logo} 
+                          name={tenant.name}
+                          tenantId={tenant.id}
+                        />
                         <div>
                           <CardTitle className="text-lg">{tenant.name}</CardTitle>
                           <CardDescription className="text-sm">/{tenant.slug}</CardDescription>
@@ -659,6 +722,20 @@ export default function TenantsPage() {
                       >
                         <Settings className="h-4 w-4 mr-1" />
                         Settings
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => enrichFromUrlMutation.mutate({ id: tenant.id })}
+                        disabled={enrichFromUrlId === tenant.id}
+                        data-testid={`button-enrich-url-tenant-${tenant.id}`}
+                        title="Fetch Logo & Details from Website"
+                      >
+                        {enrichFromUrlId === tenant.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ImageIcon className="h-4 w-4 text-blue-400" />
+                        )}
                       </Button>
                       <Button
                         variant="outline"

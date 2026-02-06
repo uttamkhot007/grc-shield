@@ -27,6 +27,13 @@ import {
   ChevronRight,
   ArrowRight,
   ClipboardList,
+  Activity,
+  TrendingUp,
+  BarChart3,
+  Zap,
+  GitCommit,
+  AlertTriangle,
+  Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -440,6 +447,158 @@ export default function AuditsPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Interactive Audit Trail Visualization */}
+          <Card className="card-3d border-primary/20">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-gradient-to-br from-primary/20 to-chart-1/20">
+                    <Activity className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Interactive Audit Trail</CardTitle>
+                    <CardDescription>Visual timeline of audit activities and findings</CardDescription>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-primary/10 border-primary/30">
+                  <BarChart3 className="h-3 w-3 mr-1" />
+                  Real-time
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Audit Activity Timeline */}
+              <div className="relative pl-6 border-l-2 border-primary/30 space-y-4">
+                {isLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="ml-2 p-3 rounded-lg bg-muted/30">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-8 h-8 rounded bg-muted animate-pulse" />
+                          <div className="space-y-1">
+                            <div className="w-32 h-4 bg-muted animate-pulse rounded" />
+                            <div className="w-20 h-3 bg-muted animate-pulse rounded" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : audits.slice(0, 6).map((audit, idx) => {
+                  const config = auditTypeConfig[audit.auditType as keyof typeof auditTypeConfig] || auditTypeConfig.internal;
+                  const Icon = config.icon;
+                  const isRecent = idx === 0;
+                  
+                  return (
+                    <div key={audit.id} className="relative">
+                      <div className={`absolute -left-[25px] p-1 rounded-full ${isRecent ? 'bg-primary' : 'bg-muted'}`}>
+                        <GitCommit className={`h-3 w-3 ${isRecent ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                      </div>
+                      <div className={`ml-2 p-3 rounded-lg ${isRecent ? 'bg-primary/5 border border-primary/20' : 'bg-muted/30'}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`p-1.5 rounded ${config.color.split(" ")[0]}`}>
+                              <Icon className={`h-3 w-3 ${config.color.split(" ")[1]}`} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">{audit.title}</p>
+                              <p className="text-xs text-muted-foreground">{config.label}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant="outline" className="text-xs">
+                              {audit.status}
+                            </Badge>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {audit.scheduledDate ? new Date(audit.scheduledDate).toLocaleDateString() : 'Not scheduled'}
+                            </p>
+                          </div>
+                        </div>
+                        {audit.currentPhase && audit.phaseProgress && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <Progress 
+                              value={(() => {
+                                const phases = Object.keys(audit.phaseProgress as Record<string, any>);
+                                const completed = Object.values(audit.phaseProgress as Record<string, any>).filter((p: any) => p.status === "completed").length;
+                                return phases.length > 0 ? Math.round((completed / phases.length) * 100) : 0;
+                              })()}
+                              className="h-1.5 flex-1" 
+                            />
+                            <span className="text-xs text-muted-foreground capitalize">{audit.currentPhase}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Quick Insights Row */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3 border-t border-border">
+                <div className="p-3 rounded-lg bg-chart-2/10 border border-chart-2/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="h-4 w-4 text-chart-2" />
+                    <span className="text-xs font-medium">Completion Rate</span>
+                  </div>
+                  <p className="text-xl font-bold text-chart-2">
+                    {audits.length > 0 
+                      ? Math.round((completedCount / audits.length) * 100) 
+                      : 0}%
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-chart-3/10 border border-chart-3/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Target className="h-4 w-4 text-chart-3" />
+                    <span className="text-xs font-medium">Avg. Duration</span>
+                  </div>
+                  <p className="text-xl font-bold text-chart-3">
+                    {(() => {
+                      const completedAudits = audits.filter(a => a.status === "completed" && a.scheduledDate && a.completedAt);
+                      if (completedAudits.length === 0) return "N/A";
+                      const avgDays = Math.round(
+                        completedAudits.reduce((acc, a) => {
+                          const start = new Date(a.scheduledDate!).getTime();
+                          const end = new Date(a.completedAt!).getTime();
+                          return acc + (end - start) / (1000 * 60 * 60 * 24);
+                        }, 0) / completedAudits.length
+                      );
+                      return `${avgDays} days`;
+                    })()}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                    <span className="text-xs font-medium">Critical Findings</span>
+                  </div>
+                  <p className="text-xl font-bold text-destructive">
+                    {audits.reduce((acc, a) => {
+                      const findings = (a.findings as any[]) || [];
+                      return acc + findings.filter((f: any) => f?.severity === "critical" || f?.severity === "high").length;
+                    }, 0)}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Filter Controls */}
+              <div className="flex items-center justify-between pt-2 border-t border-border">
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="text-xs h-7">
+                    <Filter className="h-3 w-3 mr-1" />
+                    Filter
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs h-7">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    Date Range
+                  </Button>
+                </div>
+                <Button variant="outline" size="sm" className="text-xs h-7">
+                  <Zap className="h-3 w-3 mr-1" />
+                  Export Timeline
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card className="card-3d">
             <CardHeader>

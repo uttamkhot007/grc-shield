@@ -121,6 +121,7 @@ import {
 import { useTenant } from "@/contexts/tenant-context";
 import type { Risk, Tenant } from "@shared/schema";
 import { insertRiskRegisterTemplateSchema } from "@shared/schema";
+import { DynamicRiskHeatmap, ComplianceStatusHeatmap } from "@/components/dashboard/dynamic-risk-heatmap";
 
 interface RiskCatalogItem {
   id: string;
@@ -1680,6 +1681,12 @@ export default function RiskRegisterPage() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+
+          {/* Dynamic Risk Heatmaps */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <DynamicRiskHeatmap showFilters={true} showStats={false} showLegend={true} />
+            <ComplianceStatusHeatmap />
           </div>
 
           <Card className="card-3d">

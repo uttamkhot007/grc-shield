@@ -27,12 +27,34 @@ The application utilizes a modern web stack:
 - **Tenant-Framework Applicability**: Multi-dimensional system for assigning global, industry, and regional frameworks to tenants.
 - **Tenant Management**: Super admin capabilities for managing tenants, roles, licenses, and security settings.
 - **Report Center**: 35 report templates across various GRC categories.
-- **Enterprise Features**: Trust Center, Continuous Control Monitoring, Evidence Management, Regulatory Intelligence, ESG Module, Business Continuity Planning (BCP/DR), and an Integration Hub.
+- **Enterprise Features**: Trust Center, Continuous Control Monitoring, Evidence Management, Regulatory Intelligence, ESG Module, and an Integration Hub.
+- **Business Continuity Management (BCM) Module**: Comprehensive dedicated module with 12 components:
+  - **BIA (Business Impact Analysis)**: Dynamic questionnaires with RTO/RPO/MTPD auto-calculation, impact scoring, and tiering engine
+  - **Service & Dependency Intelligence**: End-to-end dependency mapping with critical path identification
+  - **BC & DR Strategy Engine**: Strategy definition per service with gap detection
+  - **Dynamic Plan Management**: Modular plans with auto-versioning linked to services/people/vendors
+  - **Incident Activation**: Severity-based escalation with command center dashboard
+  - **Testing & Evidence**: Test calendar, pre-built scenarios, RTO vs achieved comparison
+  - **Third-Party Resilience**: Vendor continuity mapping with SLA mismatch detection
+  - **Cloud & Cyber Resilience**: Ransomware recovery plans, clean-room tracking, immutable backup validation
+  - **People & Skills**: Role-based recovery teams, skills matrix, remote-work readiness
+  - **BCM Metrics**: Executive KPIs, heat maps, scenario impact charts
+  - **Continuous Compliance**: ISO 22301/DORA/NIS2 control mapping with evidence auto-linking
+  - **AI Intelligence Layer**: Unrealistic RTO detection, stale dependency detection, DR optimization suggestions
 - **Approval Workflow System**: Configurable multi-level approval chains for GRC entities (policies, processes, procedures).
 - **Custom Framework Creation**: Allows creation of custom frameworks and controls, including CSV import.
 - **Employee Portal**: Features policy acknowledgment, training assignments, device management, cybersecurity tips, incident guidance, and an AI InfoSec Help assistant.
 - **Security Module**: Vulnerability Management (upload/analyze scan reports), Security Findings tracking, Security Posture Assessment with AI-powered scorecards and trend analysis.
 - **DSPM (Data Security Posture Management)**: Data discovery, sensitive data classification, data flow mapping, and data access risk identification with AI-powered analysis.
+- **Privacy Wizard**: AI-powered 6-step automation process for privacy compliance setup:
+  - Framework Selection (GDPR, DPDP, CCPA, LGPD, Saudi PDP, PDPA, UAE PDPL, UK GDPR, Bahrain PDPL, Kenya DPA) from database
+  - **Country-Based Framework Recommendations**: Automatic detection and prioritization of required/recommended frameworks based on tenant's country (country_framework_mappings table)
+  - Organization Profile configuration with DPO designation
+  - Data Inventory selection from tenant's existing data categories
+  - Legal Basis configuration (GDPR Article 6 lawful bases from database)
+  - DSR & Consent configuration (data subject rights from database)
+  - AI-powered gap analysis with compliance scoring and automation recommendations
+  - Creates ROPA records and consent purposes automatically with deduplication
 - **Integrated Security Scanning Engines**:
   - **Email Security Assessment**: DMARC/DKIM/SPF analysis with recommendations, MX record validation, BIMI/MTA-STS status.
   - **Web Application Scanner**: Acunetix-style comprehensive scanning with OWASP Top 10 detection, technology fingerprinting, SSL/TLS analysis, security header checks, CVSS scoring, CVE references, and attack simulation.
@@ -51,9 +73,15 @@ The application utilizes a modern web stack:
 ### System Design Choices
 - **Multi-tenancy**: Isolated data for multiple independent tenants.
 - **Role-Based Access Control (RBAC)**: Granular access based on user roles (super_admin, tenant_admin, auditor, end_user).
+- **Multi-Tenant User Access**: Users can have different roles in multiple tenants via `user_tenant_access` table:
+  - Primary tenant assignment via `users.tenant_id`
+  - Additional tenant access via `user_tenant_access` with role, expiration, and granted_by tracking
+  - API endpoints: `GET/POST/PATCH/DELETE /api/user-tenant-access`, `GET /api/users/:userId/tenant-access`, `GET /api/tenants/:tenantId/users-access`
+  - Tenant filtering: Super admins see all tenants; other users only see tenants they have access to
 - **Modular Structure**: Codebase organized into `client/`, `server/`, and `shared/`.
 - **Database Schema**: Comprehensive PostgreSQL schema supporting all GRC functionalities.
 - **API Design**: RESTful API endpoints for core functionalities.
+- **Password Security**: All passwords hashed with bcrypt (12 rounds); never stored in plaintext.
 
 ## External Dependencies
 
